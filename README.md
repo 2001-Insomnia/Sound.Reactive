@@ -41,7 +41,7 @@ dynamic controls fun to play with.
 
 works best with psycore, hardcore, punk and similar genres. slow songs do not create visuals that are as interesting. 
 
-The current working version can be run from sisas.neocities.org/audio/Soundreactive
+The current working version can be run from sisas.neocities.org/audio/Soundreactive.html
 feel free to fork, modify and add whatever to the html.
 No commercial use allowed.
 
@@ -69,3 +69,77 @@ No commercial use allowed.
 (_____)                                                                        (_____)
 
 ```
+
+```
+ ____ ____ ____ ____ ____ ____ ____ ____ ____ 
+||s |||t |||r |||u |||c |||t |||u |||r |||e ||
+||__|||__|||__|||__|||__|||__|||__|||__|||__||
+|/__\|/__\|/__\|/__\|/__\|/__\|/__\|/__\|/__\|
+
+```
+
+listener.html
+│
+├── <head>
+│   └── <style>                      # all CSS (UI panel, buttons, scene diamonds, responsive)
+│
+├── <body>
+│   ├── <canvas id="canvas">         # WebGL2 render surface
+│   ├── <div id="status">            # FPS counter overlay
+│   ├── <div id="ui">                # control panel (draggable/floatable)
+│   │   ├── Audio Input              # LISTEN / REC / DUPE buttons
+│   │   ├── Density / Decay / Threshold / Scale
+│   │   ├── Fill / Curve / Lattice Amount
+│   │   ├── Constant picker (π, φ, e, √2, √5, √9, √13)
+│   │   ├── Constant Amount
+│   │   ├── Effect Toggles           # LINES / FILL / CURVES / LATTICE
+│   │   ├── Controls                 # INVERT / FREEZE / grid res (4×4, 16×16, 64×64)
+│   │   └── Scenes                   # save/load/clear status line
+│   ├── <div id="favoritesRail">     # 12 scene-slot diamonds
+│   │
+│   └── <script>
+│       │
+│       ├── GLOBALS                          # audio ctx, controls state, render state, scenes state
+│       │
+│       ├── AUDIO ENGINE
+│       │   ├── startListening() / stopListening() / toggleListening()
+│       │   └── analyzeAudio()                # FFT → low/mid/high bands, RMS, centroid, onset
+│       │       └── idleAmbientData()          # deterministic fallback when mic is off
+│       │
+│       ├── RECORDING
+│       │   ├── startRecording() / stopRecording() / toggleRecording()
+│       │   └── formatElapsed() / updateRecordTimer() / updateRecordUI()
+│       │
+│       ├── OUTPUT WINDOW
+│       │   ├── openOutputWindow()
+│       │   ├── resizeOutputCanvas()
+│       │   └── mirrorToOutputWindow()
+│       │
+│       ├── RENDER ENGINE (WebGL2)
+│       │   ├── initGL() / resizeCanvas()
+│       │   ├── setupShaders()                 # vertex + fragment shader source
+│       │   │   └── fragment shader
+│       │   │       ├── grid/lattice warp + constant-driven rotation
+│       │   │       ├── band assignment (low/mid/high per tile)
+│       │   │       ├── fill / curve / lattice / lines effects
+│       │   │       └── brightness composite → decay trail blend
+│       │   ├── setupFramebuffers() / createFramebuffer()
+│       │   ├── setupUniforms()
+│       │   ├── createAudioTexture()            # 32×32 strip texture (low/mid/high rows)
+│       │   ├── render()                        # per-frame uniform updates + draw
+│       │   └── drawFullscreenQuad()
+│       │
+│       ├── UI BINDING
+│       │   ├── setupUI()                       # sliders, buttons, toggles wiring
+│       │   ├── setupFloatingPanel()             # drag + resize mini-player mode
+│       │   └── syncUIFromState()                # reflects `controls` back onto DOM
+│       │
+│       ├── SCENES (localStorage-backed presets)
+│       │   ├── loadScenes() / persistScenes() / clearAllScenes()
+│       │   ├── saveScene() / deleteScene() / loadScene()
+│       │   └── renderScenes()                   # draws the 12 diamond slots
+│       │
+│       └── MAIN LOOP
+│           └── init()                           # boot sequence → requestAnimationFrame loop
+
+
