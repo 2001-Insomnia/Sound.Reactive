@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>You are being listened to</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            color: #fff;
+            user-select: none;
+        }
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+        }
+
+        #ui {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        #ui::-webkit-scrollbar {
+            width: 2px;
+        }
+        #ui::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        #floatToggleBtn {
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            z-index: 2;
+        }
+        #uiDragHandle {
+            display: none;
+            width: 100%;
+            align-items: center;
+            justify-content: center;
+            cursor: move;
+            padding: 2px 0 8px 0;
+            margin-bottom: 6px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: rgba(255, 255, 255, 0.35);
+            user-select: none;
+        }
+        #ui.floating {
+            top: 80px;
+            left: 80px;
+            right: auto;
+            bottom: auto;
+            width: 360px;
+            height: 440px;
+            min-width: 260px;
+            min-height: 200px;
+            max-height: none;
+            resize: both;
+            overflow: auto;
+            align-content: flex-start;
+        }
+        #ui.floating #uiDragHandle {
+            display: flex;
+        }
+        #ui.floating .control-group {
+            min-width: 45%;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 120px;
+            flex: 1;
+        }
+        .control-group label {
+            font-size: 9px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.5);
+            letter-spacing: 1px;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+            height: 2px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+        }
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 10px;
+            height: 10px;
+            background: #fff;
+            cursor: pointer;
+            border-radius: 0;
+        }
+        .control-group input[type="range"]::-moz-range-thumb {
+            width: 10px;
+            height: 10px;
+            background: #fff;
+            cursor: pointer;
+            border: none;
+            border-radius: 0;
+        }
+        .control-group .value {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.7);
+            text-align: right;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .icon-btn {
+            cursor: pointer;
+            opacity: 0.5;
+            font-size: 12px;
+            line-height: 1;
+            transition: opacity 0.2s;
+            user-select: none;
+        }
+        .icon-btn:hover {
+            opacity: 1;
+        }
+        .btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 4px 10px;
+            font-size: 9px;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.6);
+        }
+        .btn.active {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #fff;
+        }
+        .btn.primary {
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .btn.listening {
+            background: #fff;
+            color: #000;
+            border-color: #fff;
+        }
+        .btn.recording {
+            background: rgba(255, 40, 40, 0.15);
+            color: #ff4444;
+            border-color: #ff3333;
+            box-shadow: 0 0 6px rgba(255, 40, 40, 0.5);
+            animation: recPulse 1.2s ease-in-out infinite;
+        }
+        @keyframes recPulse {
+            0%, 100% { box-shadow: 0 0 4px rgba(255, 40, 40, 0.4); }
+            50% { box-shadow: 0 0 10px rgba(255, 40, 40, 0.8); }
+        }
+        #recordStatus.active {
+            color: #ff4444;
+        }
+
+        #favoritesRail {
+            position: fixed;
+            top: 50%;
+            right: 16px;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            z-index: 100;
+            align-items: center;
+        }
+        .favorite-diamond {
+            width: 16px;
+            height: 16px;
+            border: 1.5px solid #fff;
+            box-shadow: 0 0 0 1.5px #000, 0 0 4px rgba(0,0,0,0.8);
+            background: rgba(0, 0, 0, 0.35);
+            transform: rotate(45deg);
+            cursor: pointer;
+            transition: all 0.15s;
+            flex-shrink: 0;
+            position: relative;
+        }
+        .favorite-diamond:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+        .favorite-diamond.filled {
+            background: #fff;
+        }
+        .favorite-diamond.active {
+            box-shadow: 0 0 0 1.5px #000, 0 0 8px 2px #fff;
+        }
+        .favorite-diamond .scene-num {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 8px;
+            color: #fff;
+            pointer-events: none;
+        }
+        .favorite-diamond.filled .scene-num {
+            color: #000;
+        }
+        .diamond-delete {
+            position: absolute;
+            top: -7px;
+            right: -7px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff3333;
+            color: #fff;
+            font-size: 9px;
+            line-height: 12px;
+            text-align: center;
+            transform: rotate(-45deg);
+            opacity: 0;
+            transition: opacity 0.15s;
+            cursor: pointer;
+        }
+        .favorite-diamond.filled:hover .diamond-delete {
+            opacity: 1;
+        }
+        .favorite-diamond.overwritten {
+            animation: diamondFlash 0.4s ease-out;
+        }
+        @keyframes diamondFlash {
+            0% { background: #4ecbff; box-shadow: 0 0 0 1.5px #000, 0 0 14px 4px #4ecbff; }
+            100% { background: #fff; box-shadow: 0 0 0 1.5px #000, 0 0 8px 2px #fff; }
+        }
+
+        #micStatus {
+            font-size: 8px;
+            color: rgba(255, 255, 255, 0.3);
+            margin-top: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        #status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.2);
+            letter-spacing: 1px;
+            z-index: 100;
+            text-align: right;
+            line-height: 1.6;
+            pointer-events: none;
+        }
+
+        @media (max-width: 768px) {
+            #ui {
+                bottom: 10px;
+                left: 10px;
+                right: 10px;
+                padding: 10px;
+                gap: 6px;
+                font-size: 9px;
+            }
+            .control-group {
+                min-width: 80px;
+            }
+            .btn {
+                padding: 3px 6px;
+                font-size: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div id="status">
+        <div id="fps">-- FPS</div>
+    </div>
+
+    <div id="ui">
+        <div id="uiDragHandle">⋮⋮ DRAG ⋮⋮</div>
+        <span id="floatToggleBtn" class="icon-btn" title="Float panel (drag &amp; resize)">⤢</span>
+        <!-- Audio Input -->
+        <div class="control-group" style="flex: 0 0 auto; min-width: 140px;">
+            <label>Audio Input</label>
+            <div class="button-group">
+                <button class="btn primary" id="listenBtn">🎙 LISTEN</button>
+                <button class="btn primary" id="recordBtn">● REC</button>
+                <button class="btn primary" id="outputWinBtn" title="Duplicate graphics on a new window">⧉ DUPE</button>
+            </div>
+            <div id="micStatus">Mic: off</div>
+            <div id="recordStatus" style="font-size:8px;color:rgba(255,255,255,0.3);margin-top:2px;letter-spacing:0.5px;">Rec: off — saves to your Downloads folder</div>
+        </div>
+
+        <!-- Density -->
+        <div class="control-group">
+            <label>Line Density</label>
+            <input type="range" id="density" min="0" max="1" step="0.01" value="0.5">
+            <div class="value" id="densityVal">0.50</div>
+        </div>
+
+        <!-- Decay -->
+        <div class="control-group">
+            <label>Decay</label>
+            <input type="range" id="decay" min="0.01" max="0.99" step="0.01" value="0.85">
+            <div class="value" id="decayVal">0.85</div>
+        </div>
+
+        <!-- Threshold -->
+        <div class="control-group">
+            <label>Threshold</label>
+            <input type="range" id="threshold" min="-2" max="1" step="0.01" value="0.28">
+            <div class="value" id="thresholdVal">0.28</div>
+        </div>
+
+        <!-- Scale -->
+        <div class="control-group">
+            <label>Scale</label>
+            <input type="range" id="scale" min="0.3" max="3" step="0.1" value="1.0">
+            <div class="value" id="scaleVal">1.00</div>
+        </div>
+
+        <!-- Fill -->
+        <div class="control-group">
+            <label>Added Shine</label>
+            <input type="range" id="fillAmount" min="0" max="1" step="0.01" value="0.6">
+            <div class="value" id="fillAmountVal">0.60</div>
+        </div>
+
+        <!-- Curve -->
+        <div class="control-group">
+            <label>Curve Amount</label>
+            <input type="range" id="curveAmount" min="0" max="2" step="0.01" value="0.5">
+            <div class="value" id="curveAmountVal">0.50</div>
+        </div>
+
+        <!-- Lattice -->
+        <div class="control-group">
+            <label>Lattice Amount</label>
+            <input type="range" id="latticeAmount" min="0" max="1" step="0.01" value="0.4">
+            <div class="value" id="latticeAmountVal">0.40</div>
+        </div>
+
+        <!-- Constant -->
+        <div class="control-group" style="flex: 0 0 auto;">
+            <label>Constant</label>
+            <div class="button-group">
+                <button class="btn active" id="piBtn" data-value="3.14159265">π</button>
+                <button class="btn" id="phiBtn" data-value="1.61803399">φ</button>
+                <button class="btn" id="eBtn" data-value="2.71828183">e</button>
+                <button class="btn" id="sqrt2Btn" data-value="1.41421356">√2</button>
+                <button class="btn" id="sqrt5Btn" data-value="2.23606798">√5</button>
+                <button class="btn" id="sqrt9Btn" data-value="3.0">√9</button>
+                <button class="btn" id="sqrt13Btn" data-value="3.60555128">√13</button>
+            </div>
+        </div>
+
+        <!-- Constant Amount -->
+        <div class="control-group">
+            <label>Constant Amount</label>
+            <input type="range" id="constantAmount" min="-10" max="10" step="0.1" value="0">
+            <div class="value" id="constantAmountVal">0.00</div>
+        </div>
+
+        <!-- Effect Toggles -->
+        <div class="control-group" style="flex: 0 0 auto;">
+            <label>Effects</label>
+            <div class="button-group">
+                <button class="btn active" id="linesBtn">LINES</button>
+                <button class="btn active" id="fillBtn">FILL</button>
+                <button class="btn active" id="curvesBtn">CURVES</button>
+                <button class="btn" id="latticeBtn">LATTICE</button>
+            </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="control-group" style="flex: 0 0 auto;">
+            <label>Controls</label>
+            <div class="button-group">
+                <button class="btn" id="invertBtn">INVERT</button>
+                <button class="btn" id="freezeBtn">FREEZE</button>
+                <button class="btn" id="grid4Btn">4×4</button>
+                <button class="btn active" id="grid16Btn">16×16</button>
+                <button class="btn" id="grid64Btn">64×64</button>
+            </div>
+        </div>
+
+        <!-- Scenes -->
+        <div class="control-group" style="flex: 1 1 100%; min-width: 100%; box-sizing: border-box;">
+            <label style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <span>Scenes</span>
+                <span id="clearScenesBtn" title="Clear all saved scenes" class="icon-btn">🗑 CLEAR ALL</span>
+            </label>
+            <div class="value" id="sceneStatus" style="text-align:left; white-space:normal; overflow-wrap:break-word; line-height:1.4;">Click empty ↗ to save. Click filled to load. Right-click filled to overwrite. Hover + × to delete one.</div>
+        </div>
+    </div>
+
+    <!-- Scene diamonds -->
+    <div id="favoritesRail"></div>
+
+    <script>
+        // ---------- GLOBALS ----------
+        let audioCtx = null;
+        let micStream = null;
+        let micAnalyser = null;
+        let listening = false;
+        let micFloatData = null;
+        let prevNorm = null;
+        let recordAudioDest = null; 
+        
+        // Recording state
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let recording = false;
+        let recordStartTime = 0;
+        let recordTimerInterval = null;
+
+
+        let outputWindow = null;
+        let outputCanvasEl = null;
+        let outputCtx = null;
+
+        let analyserData = {
+
+            lowBins: new Float32Array(8),
+            midBins: new Float32Array(8),
+            highBins: new Float32Array(8),
+            rms: 0,
+            bands: { low: 0, mid: 0, high: 0 },
+            onset: 0,
+            centroid: 0 // spectral "brightness" (0 = energy weighted toward bass, 1 = toward treble)
+        };
+
+
+        let audioClock = 0;
+        let lastFrameTimestamp = performance.now();
+
+        // Controls state
+        const controls = {
+            density: 0.5,
+            decay: 0.85,
+            threshold: 0.28,
+            scale: 1.0,
+            fillAmount: 0.6,
+            curveAmount: 0.5,
+            latticeAmount: 0.4,
+            mathConstant: 3.14159265,
+            constantAmount: 0.0,
+            invert: false,
+            freeze: false,
+            linesEnabled: true,
+            fillEnabled: true,
+            curvesEnabled: true,
+            latticeEnabled: false,
+            gridRes: 16
+        };
+
+
+        let gl = null;
+        let program = null;
+        let fbo1 = null,
+            fbo2 = null;
+        let currentFbo = 1;
+        let canvas = null;
+        let frameCount = 0;
+        let lastFpsUpdate = 0;
+
+
+        let uniforms = {};
+
+        // Scenes state
+        const SCENE_COUNT = 12;
+        let scenes = new Array(SCENE_COUNT).fill(null);
+        let activeSceneIndex = null;
+        const SCENES_KEY = 'latticeVisualizerScenes';
+
+        // AUDIO ENGINE 
+        async function startListening() {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+
+                micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+
+                const source = audioCtx.createMediaStreamSource(micStream);
+                micAnalyser = audioCtx.createAnalyser();
+                micAnalyser.fftSize = 4096; // finer bins so the 20-200Hz band has real resolution
+                micAnalyser.smoothingTimeConstant = 0.75;
+
+                source.connect(micAnalyser);
+
+
+                recordAudioDest = audioCtx.createMediaStreamDestination();
+                source.connect(recordAudioDest);
+
+                micFloatData = new Float32Array(micAnalyser.frequencyBinCount);
+                prevNorm = new Float32Array(micAnalyser.frequencyBinCount);
+
+                listening = true;
+                updateMicUI();
+            } catch (e) {
+                console.error('Microphone access denied or unavailable:', e);
+                document.getElementById('micStatus').textContent = 'Mic: permission denied';
+            }
+        }
+
+        function stopListening() {
+            if (micStream) {
+                micStream.getTracks().forEach(t => t.stop());
+            }
+            micStream = null;
+            micAnalyser = null;
+            recordAudioDest = null;
+            listening = false;
+            updateMicUI();
+        }
+
+        function toggleListening() {
+            if (listening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        // ---------- RECORDING 
+        function toggleRecording() {
+            if (recording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+
+        function startRecording() {
+            const stream = canvas.captureStream(60);
+
+            if (recordAudioDest) {
+                recordAudioDest.stream.getAudioTracks().forEach(track => stream.addTrack(track));
+            }
+
+            const mimeCandidates = [
+                'video/webm;codecs=vp9,opus',
+                'video/webm;codecs=vp8,opus',
+                'video/webm'
+            ];
+            const mimeType = mimeCandidates.find(t => MediaRecorder.isTypeSupported(t)) || '';
+
+            recordedChunks = [];
+            try {
+                mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType, videoBitsPerSecond: 8_000_000 } : undefined);
+            } catch (e) {
+                console.error('MediaRecorder failed to start:', e);
+                document.getElementById('recordStatus').textContent = 'Rec: unsupported in this browser';
+                return;
+            }
+
+            mediaRecorder.ondataavailable = e => {
+                if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+            };
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `listener-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+            };
+
+            mediaRecorder.start(1000); // 1s chunks so a crash doesn't lose everything
+            recording = true;
+            recordStartTime = Date.now();
+            updateRecordUI();
+            recordTimerInterval = setInterval(updateRecordTimer, 250);
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            recording = false;
+            clearInterval(recordTimerInterval);
+            recordTimerInterval = null;
+            updateRecordUI();
+        }
+
+        function formatElapsed(ms) {
+            const totalSec = Math.floor(ms / 1000);
+            const h = Math.floor(totalSec / 3600);
+            const m = Math.floor((totalSec % 3600) / 60);
+            const s = totalSec % 60;
+            const pad = n => String(n).padStart(2, '0');
+            return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+        }
+
+        function updateRecordTimer() {
+            if (!recording) return;
+            const status = document.getElementById('recordStatus');
+            status.textContent = `● REC ${formatElapsed(Date.now() - recordStartTime)}` + (recordAudioDest ? ' · +audio' : ' · video only');
+        }
+
+        function updateRecordUI() {
+            const btn = document.getElementById('recordBtn');
+            const status = document.getElementById('recordStatus');
+            if (recording) {
+                btn.classList.add('recording');
+                btn.textContent = '■ STOP';
+                status.classList.add('active');
+                status.textContent = '● REC 00:00' + (recordAudioDest ? ' · +audio' : ' · video only');
+            } else {
+                btn.classList.remove('recording');
+                btn.textContent = '● REC';
+                status.classList.remove('active');
+                status.textContent = 'Rec: off — saves to your Downloads folder';
+            }
+        }
+
+        // ---------- OUTPUT WINDOW 
+        function openOutputWindow() {
+            if (outputWindow && !outputWindow.closed) {
+                outputWindow.focus();
+                return;
+            }
+
+            outputWindow = window.open('', 'listener-output', 'width=1280,height=720');
+            if (!outputWindow) {
+                alert('Popup blocked — allow popups for this site to use the output window.');
+                return;
+            }
+
+            outputWindow.document.title = 'Output';
+            outputWindow.document.head.innerHTML = '<style>*{margin:0;padding:0}html,body{background:#000;overflow:hidden;height:100%;width:100%}canvas{display:block;width:100vw;height:100vh}</style>';
+            outputCanvasEl = outputWindow.document.createElement('canvas');
+            outputWindow.document.body.appendChild(outputCanvasEl);
+            outputCtx = outputCanvasEl.getContext('2d');
+
+            resizeOutputCanvas();
+            outputWindow.addEventListener('resize', resizeOutputCanvas);
+            outputWindow.addEventListener('beforeunload', () => {
+                outputWindow = null;
+                outputCanvasEl = null;
+                outputCtx = null;
+            });
+        }
+
+        function resizeOutputCanvas() {
+            if (!outputCanvasEl || !outputWindow || outputWindow.closed) return;
+            outputCanvasEl.width = outputWindow.innerWidth;
+            outputCanvasEl.height = outputWindow.innerHeight;
+        }
+
+        function mirrorToOutputWindow() {
+            if (!outputWindow || outputWindow.closed || !outputCtx) return;
+            outputCtx.drawImage(canvas, 0, 0, outputCanvasEl.width, outputCanvasEl.height);
+        }
+
+        function updateMicUI() {
+            const btn = document.getElementById('listenBtn');
+            const status = document.getElementById('micStatus');
+            if (listening) {
+                btn.classList.add('listening');
+                btn.textContent = '■ STOP';
+                status.textContent = 'Mic: listening';
+            } else {
+                btn.classList.remove('listening');
+                btn.textContent = '🎙 LISTEN';
+                status.textContent = 'Mic: off';
+            }
+        }
+
+        // Real-world frequency boundaries independent of FFT size
+        const BAND_HZ = {
+            low: [20, 200],
+            mid: [200, 1500],
+            high: [1500, 20000]
+        };
+
+        function analyzeAudio() {
+            if (!listening || !micAnalyser) {
+                idleAmbientData();
+                return;
+            }
+
+            const bins = micAnalyser.frequencyBinCount;
+            micAnalyser.getFloatFrequencyData(micFloatData);
+
+            const norm = new Float32Array(bins);
+            for (let i = 0; i < bins; i++) {
+                let db = micFloatData[i];
+                if (!isFinite(db)) db = -100;
+                let n = (db + 100) / 100; // map ~[-100dB, 0dB] -> [0, 1]
+                norm[i] = Math.max(0, Math.min(1, n));
+            }
+
+            const timeData = new Float32Array(micAnalyser.fftSize);
+            micAnalyser.getFloatTimeDomainData(timeData);
+            let sum = 0;
+            for (let i = 0; i < timeData.length; i++) sum += timeData[i] * timeData[i];
+            const rms = Math.sqrt(sum / timeData.length);
+
+            // Real Hz -> bin index conversion (sampleRate-aware, not arbitrary percentages)
+            const nyquist = audioCtx.sampleRate / 2;
+            const hzPerBin = nyquist / bins;
+            const binOf = hz => Math.max(0, Math.min(bins - 1, Math.round(hz / hzPerBin)));
+
+            const lowStart = binOf(BAND_HZ.low[0]), lowEnd = Math.max(lowStart + 1, binOf(BAND_HZ.low[1]));
+            const midStart = lowEnd, midEnd = Math.max(midStart + 1, binOf(BAND_HZ.mid[1]));
+            const highStart = midEnd, highEnd = Math.max(highStart + 1, binOf(BAND_HZ.high[1]));
+
+            const extractBand = (start, end, outLen) => {
+                const out = new Float32Array(outLen);
+                const span = Math.max(1, end - start);
+                for (let i = 0; i < outLen; i++) {
+                    const srcIdx = Math.min(bins - 1, start + Math.floor((i / outLen) * span));
+                    out[i] = norm[srcIdx];
+                }
+                return out;
+            };
+            const avgRange = (start, end) => {
+                let s = 0;
+                const n = Math.max(1, end - start);
+                for (let i = start; i < end && i < bins; i++) s += norm[i];
+                return s / n;
+            };
+
+            analyserData.lowBins = extractBand(lowStart, lowEnd, 8);
+            analyserData.midBins = extractBand(midStart, midEnd, 8);
+            analyserData.highBins = extractBand(highStart, highEnd, 8);
+            analyserData.bands.low = avgRange(lowStart, lowEnd);
+            analyserData.bands.mid = avgRange(midStart, midEnd);
+            analyserData.bands.high = avgRange(highStart, highEnd);
+            analyserData.rms = rms;
+
+
+            let centroidNum = 0;
+            let centroidDen = 0;
+            for (let i = 0; i < bins; i++) {
+                const freq = i * hzPerBin;
+                const mag = norm[i];
+                centroidNum += freq * mag;
+                centroidDen += mag;
+            }
+            const centroidHz = centroidDen > 0.0001 ? centroidNum / centroidDen : 0;
+
+            analyserData.centroid = Math.max(0, Math.min(1, centroidHz / 8000));
+
+            // spectral flux onset detection (full spectrum)
+            let flux = 0;
+            for (let i = 0; i < bins; i++) {
+                const diff = norm[i] - prevNorm[i];
+                if (diff > 0) flux += diff;
+            }
+            prevNorm.set(norm);
+            analyserData.onset = Math.min(1, flux / 20);
+        }
+
+
+        function idleAmbientData() {
+            const t = Date.now() / 1000;
+            const c = controls.mathConstant;
+
+
+            const digitStr = Math.abs(c).toFixed(8).replace('.', '').replace('-', '');
+            const digits = digitStr.split('').map(Number);
+            const digitAt = i => digits[i % digits.length];
+
+            const mk = (n, bandSeed) => {
+                const a = new Float32Array(n);
+                for (let i = 0; i < n; i++) {
+                    const d = digitAt(i + bandSeed * n); // 0-9, drives phase & amplitude per bin
+                    const wobble = Math.sin(t * (0.35 + d * 0.05) + i * 1.7 + bandSeed * 3.1 + c) * 0.06;
+                    a[i] = Math.max(0, wobble + 0.08 + d * 0.008);
+                }
+                return a;
+            };
+            analyserData.lowBins = mk(8, 0);
+            analyserData.midBins = mk(8, 1);
+            analyserData.highBins = mk(8, 2);
+
+            const baseline = 0.05 + digitAt(0) * 0.006;
+            analyserData.rms = baseline + Math.sin(t * 0.3 + digitAt(1)) * 0.02;
+            analyserData.bands.low = baseline + Math.sin(t * 0.31 + digitAt(2)) * 0.02;
+            analyserData.bands.mid = baseline + Math.sin(t * 0.29 + digitAt(3)) * 0.02;
+            analyserData.bands.high = baseline + Math.sin(t * 0.33 + digitAt(4)) * 0.02;
+
+
+            analyserData.centroid = 0.3 + 0.2 * Math.sin(t * 0.07 + digitAt(5));
+
+
+            const pulsePeriod = 3 + digitAt(6) * 0.4;
+            analyserData.onset = (t % pulsePeriod) < 0.05 ? 1 : 0;
+        }
+
+        // ---------- RENDER ENGINE (WebGL2) ----------
+        function initGL() {
+            canvas = document.getElementById('canvas');
+            gl = canvas.getContext('webgl2', {
+                alpha: false,
+                antialias: false,
+                powerPreference: 'high-performance'
+            });
+
+            if (!gl) {
+                console.error('WebGL2 not supported');
+                return false;
+            }
+
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            if (!setupShaders()) return false;
+            setupFramebuffers();
+            setupUniforms();
+
+            return true;
+        }
+
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            const w = window.innerWidth * dpr;
+            const h = window.innerHeight * dpr;
+            canvas.width = w;
+            canvas.height = h;
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+            if (gl) {
+                gl.viewport(0, 0, w, h);
+
+                if (fbo1 || fbo2) {
+                    if (fbo1) {
+                        gl.deleteFramebuffer(fbo1.fbo);
+                        gl.deleteTexture(fbo1.texture);
+                    }
+                    if (fbo2) {
+                        gl.deleteFramebuffer(fbo2.fbo);
+                        gl.deleteTexture(fbo2.texture);
+                    }
+                    setupFramebuffers();
+                }
+            }
+        }
+
+        function setupShaders() {
+            const vsSource = `#version 300 es
+            in vec2 a_position;
+            out vec2 v_uv;
+            void main() {
+                v_uv = a_position * 0.5 + 0.5;
+                gl_Position = vec4(a_position, 0.0, 1.0);
+            }`;
+
+            const fsSource = `#version 300 es
+            precision highp float;
+
+            uniform vec2 u_resolution;
+            uniform float u_time;
+            uniform sampler2D u_prevFrame;
+            uniform sampler2D u_audioTexture;
+            uniform float u_density;
+            uniform float u_decay;
+            uniform float u_threshold;
+            uniform float u_scale;
+            uniform float u_fillAmount;
+            uniform float u_curveAmount;
+            uniform float u_latticeAmount;
+            uniform float u_mathConstant;
+            uniform float u_constantAmount;
+            uniform bool u_invert;
+            uniform bool u_freeze;
+            uniform bool u_linesEnabled;
+            uniform bool u_fillEnabled;
+            uniform bool u_curvesEnabled;
+            uniform bool u_latticeEnabled;
+            uniform int u_gridRes;
+            uniform float u_rms;
+            uniform float u_low;
+            uniform float u_mid;
+            uniform float u_high;
+            uniform float u_onset;
+            uniform float u_centroid;
+
+            out vec4 outColor;
+
+            float hash21(vec2 p) {
+                p = fract(p * vec2(123.34, 456.21));
+                p += dot(p, p + 45.32);
+                return fract(p.x * p.y);
+            }
+
+            void main() {
+                vec2 uv = gl_FragCoord.xy / u_resolution;
+                vec2 center = vec2(0.5);
+                vec2 pos = (uv - center) * u_scale;
+
+                float gridSize = float(u_gridRes);
+
+                // Low-band warp — gentle organic distortion of space before gridding
+                float lowWarp = u_low * 2.0;
+                vec2 warped = pos + vec2(
+                    sin(pos.y * 30.0 + u_time * 0.5) * lowWarp * 0.02,
+                    cos(pos.x * 30.0 + u_time * 0.5) * lowWarp * 0.02
+                );
+
+                // Constant-driven rotation — spins the whole lattice by an angle
+                // derived from the chosen constant (pi, phi, e, sqrt2), scaled by
+                // the Constant Amount slider. At amount 0 this is a no-op.
+                float rotAngle = u_constantAmount * u_mathConstant * 0.15;
+                float rc = cos(rotAngle);
+                float rs = sin(rotAngle);
+                warped = vec2(warped.x * rc - warped.y * rs, warped.x * rs + warped.y * rc);
+
+                vec2 gridPos = floor(warped * gridSize);
+                vec2 gridUV = fract(warped * gridSize);
+                vec2 cellCenter = gridUV - 0.5;
+
+                // Every tile is permanently assigned to ONE real frequency band
+                // (roughly a third of tiles each) so low/mid/high content lights
+                // up its own fixed set of squares instead of the whole grid
+                // reacting to one blended average.
+                float cellHash = hash21(gridPos);
+                float bandPick = fract(cellHash * 3.0);
+                float bandIndex = floor(cellHash * 3.0); // 0 = low, 1 = mid, 2 = high
+                float bandRowStart = bandIndex / 3.0;
+                vec2 audioUV = vec2(fract(cellHash * 13.7), bandRowStart + fract(cellHash * 7.3) / 3.0);
+                float cellEnergy = clamp(texture(u_audioTexture, audioUV).r * 1.8, 0.0, 1.0);
+                float cellGate = step(u_threshold, cellEnergy);
+
+                // ---- Fill: illuminated square, not a flat block — brightness
+                // falls off from the tile's center towards its edge, like a
+                // light source rather than a painted patch ----
+                float fill = 0.0;
+                if (u_fillEnabled) {
+                    float pad = 0.04 + (1.0 - u_density) * 0.15;
+                    float chebyshev = max(abs(cellCenter.x), abs(cellCenter.y));
+                    float squareGlow = 1.0 - smoothstep(0.0, 0.5 - pad, chebyshev);
+                    squareGlow = pow(squareGlow, 1.6);
+                    fill = squareGlow * cellEnergy * cellGate * u_fillAmount;
+                }
+
+                // ---- Curves: a sine curve traced inside each tile ----
+                float curve = 0.0;
+                if (u_curvesEnabled) {
+                    // Base frequency from how much energy the tile has, then
+                    // shifted by spectral centroid — a bright sound (energy
+                    // weighted toward treble) pushes the curve's frequency up
+                    // even on a low-band tile, distinguishing "bassy" from
+                    // "bass-heavy-but-bright" content that would otherwise
+                    // look identical (same amplitude, same gate).
+                    float freq = (2.0 + cellEnergy * 8.0) * (0.6 + u_centroid * 1.3) * mix(1.0, u_mathConstant * 0.6, u_constantAmount);
+                    float phase = cellHash * 6.2831 + u_time * (0.5 + cellHash * 1.5);
+                    float wave = sin(gridUV.x * freq * 6.2831 + phase) * 0.35;
+                    float d = abs((gridUV.y - 0.5) - wave);
+                    float thickness = 0.02 + cellEnergy * 0.06;
+                    curve = (1.0 - smoothstep(thickness, thickness + 0.015, d)) * cellGate * u_curveAmount;
+                }
+
+                // ---- Lattice: interference pattern, confined to each tile and
+                // shaped by that tile's own band, so it never washes the whole
+                // screen at once — only the lit squares carry a lattice texture ----
+                float lattice = 0.0;
+                if (u_latticeEnabled) {
+                    float lfreq = bandIndex < 0.5 ? (6.0 + u_low * 14.0) :
+                                  bandIndex < 1.5 ? (14.0 + u_mid * 24.0) :
+                                                    (26.0 + u_high * 40.0);
+                    lfreq *= mix(1.0, u_mathConstant * 0.45, u_constantAmount);
+                    // Same centroid logic as the curves above: shape of the
+                    // pattern shifts with pitch, not just its brightness.
+                    lfreq *= (0.5 + u_centroid * 1.5);
+                    float l1 = sin(gridUV.x * lfreq + u_time * (0.3 + bandIndex * 0.15));
+                    float l2 = sin(gridUV.y * lfreq - u_time * (0.25 + bandIndex * 0.1));
+                    float pattern = clamp(l1 * l2 * 0.5 + 0.5, 0.0, 1.0);
+                    lattice = pow(pattern, 3.0) * u_latticeAmount * cellEnergy * cellGate;
+                }
+
+                // ---- Lines: faint grid skeleton, brighter only where a tile is lit ----
+                float lines = 0.0;
+                if (u_linesEnabled) {
+                    float lineThickness = (0.015 + cellEnergy * 0.15) * u_density;
+                    float lx = abs(cellCenter.x) * 2.0;
+                    float ly = abs(cellCenter.y) * 2.0;
+                    float lineX = 1.0 - smoothstep(0.0, lineThickness, lx);
+                    float lineY = 1.0 - smoothstep(0.0, lineThickness, ly);
+                    lines = max(lineX, lineY) * mix(0.12, 1.0, cellGate);
+                }
+
+                float flash = u_onset * 0.35 * cellGate;
+
+                float brightness = max(max(fill, curve), max(lines, lattice));
+                brightness *= (0.15 + cellEnergy * 1.6);
+                brightness += flash;
+
+                // high-frequency shimmer, only on tiles assigned to the high band
+                float noise = fract(sin(dot(gridPos + gridUV, vec2(12.9898, 78.233)) + u_time) * 43758.5453);
+                brightness += step(1.5, bandIndex) * u_high * noise * 0.08 * cellGate;
+
+                brightness = clamp(brightness, 0.0, 1.0);
+
+                vec3 color = vec3(brightness);
+                color = mix(color, vec3(0.9, 0.92, 1.0), brightness * 0.05);
+
+                if (u_invert) {
+                    color = 1.0 - color;
+                }
+
+                if (u_freeze) {
+                    outColor = vec4(color, 1.0);
+                    return;
+                }
+
+                vec4 prev = texture(u_prevFrame, uv);
+                float decayAmount = 1.0 - u_decay;
+                vec4 finalColor = mix(vec4(color, 1.0), prev, decayAmount);
+                finalColor.rgb = smoothstep(0.05, 0.95, finalColor.rgb);
+
+                outColor = finalColor;
+            }`;
+
+            const vertShader = gl.createShader(gl.VERTEX_SHADER);
+            gl.shaderSource(vertShader, vsSource);
+            gl.compileShader(vertShader);
+            if (!gl.getShaderParameter(vertShader, gl.COMPILE_STATUS)) {
+                console.error('Vertex shader error:', gl.getShaderInfoLog(vertShader));
+                return false;
+            }
+
+            const fragShader = gl.createShader(gl.FRAGMENT_SHADER);
+            gl.shaderSource(fragShader, fsSource);
+            gl.compileShader(fragShader);
+            if (!gl.getShaderParameter(fragShader, gl.COMPILE_STATUS)) {
+                console.error('Fragment shader error:', gl.getShaderInfoLog(fragShader));
+                return false;
+            }
+
+            program = gl.createProgram();
+            gl.attachShader(program, vertShader);
+            gl.attachShader(program, fragShader);
+            gl.linkProgram(program);
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error('Program link error:', gl.getProgramInfoLog(program));
+                return false;
+            }
+
+            return true;
+        }
+
+        function setupFramebuffers() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            fbo1 = createFramebuffer(w, h);
+            fbo2 = createFramebuffer(w, h);
+        }
+
+        function createFramebuffer(width, height) {
+            const fb = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+
+            const tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            return { fbo: fb, texture: tex };
+        }
+
+        function setupUniforms() {
+            if (!program) return;
+            uniforms = {
+                resolution: gl.getUniformLocation(program, 'u_resolution'),
+                time: gl.getUniformLocation(program, 'u_time'),
+                prevFrame: gl.getUniformLocation(program, 'u_prevFrame'),
+                audioTexture: gl.getUniformLocation(program, 'u_audioTexture'),
+                density: gl.getUniformLocation(program, 'u_density'),
+                decay: gl.getUniformLocation(program, 'u_decay'),
+                threshold: gl.getUniformLocation(program, 'u_threshold'),
+                scale: gl.getUniformLocation(program, 'u_scale'),
+                fillAmount: gl.getUniformLocation(program, 'u_fillAmount'),
+                curveAmount: gl.getUniformLocation(program, 'u_curveAmount'),
+                latticeAmount: gl.getUniformLocation(program, 'u_latticeAmount'),
+                mathConstant: gl.getUniformLocation(program, 'u_mathConstant'),
+                constantAmount: gl.getUniformLocation(program, 'u_constantAmount'),
+                invert: gl.getUniformLocation(program, 'u_invert'),
+                freeze: gl.getUniformLocation(program, 'u_freeze'),
+                linesEnabled: gl.getUniformLocation(program, 'u_linesEnabled'),
+                fillEnabled: gl.getUniformLocation(program, 'u_fillEnabled'),
+                curvesEnabled: gl.getUniformLocation(program, 'u_curvesEnabled'),
+                latticeEnabled: gl.getUniformLocation(program, 'u_latticeEnabled'),
+                gridRes: gl.getUniformLocation(program, 'u_gridRes'),
+                rms: gl.getUniformLocation(program, 'u_rms'),
+                low: gl.getUniformLocation(program, 'u_low'),
+                mid: gl.getUniformLocation(program, 'u_mid'),
+                high: gl.getUniformLocation(program, 'u_high'),
+                onset: gl.getUniformLocation(program, 'u_onset'),
+                centroid: gl.getUniformLocation(program, 'u_centroid')
+            };
+        }
+
+        function createAudioTexture(lowBins, midBins, highBins) {
+            // 32x32 texture split into 3 horizontal strips — rows [0, 10) hold the
+            // low band, [10, 21) the mid band, [21, 32) the high band. The shader
+            // picks a row range by each tile's assigned band, and a column within
+            // it for spectral variety, so a tile can only ever be lit by the real
+            // frequency range it belongs to.
+            const size = 32;
+            const data = new Float32Array(size * size);
+            const strips = [
+                { bins: lowBins, rowStart: 0, rowEnd: 10 },
+                { bins: midBins, rowStart: 10, rowEnd: 21 },
+                { bins: highBins, rowStart: 21, rowEnd: 32 }
+            ];
+            strips.forEach(({ bins, rowStart, rowEnd }) => {
+                for (let row = rowStart; row < rowEnd; row++) {
+                    for (let col = 0; col < size; col++) {
+                        const srcIdx = Math.min(bins.length - 1, Math.floor((col / size) * bins.length));
+                        data[row * size + col] = bins[srcIdx] || 0;
+                    }
+                }
+            });
+
+            const tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, size, size, 0, gl.RED, gl.FLOAT, data);
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            return tex;
+        }
+
+        function render() {
+            if (!gl || !program) return;
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Analyze audio
+            analyzeAudio();
+
+            const nowMs = performance.now();
+            const deltaTime = Math.min(0.1, (nowMs - lastFrameTimestamp) / 1000);
+            lastFrameTimestamp = nowMs;
+            audioClock += (0.02 + analyserData.rms * 2.0) * deltaTime;
+
+            // Create audio texture
+            const audioTex = createAudioTexture(analyserData.lowBins, analyserData.midBins, analyserData.highBins);
+
+            // Select framebuffers
+            const readFbo = currentFbo === 1 ? fbo1 : fbo2;
+            const writeFbo = currentFbo === 1 ? fbo2 : fbo1;
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, writeFbo.fbo);
+            gl.viewport(0, 0, w, h);
+
+            gl.useProgram(program);
+
+            // Set uniforms
+            gl.uniform2f(uniforms.resolution, w, h);
+            // u_time now carries the audio-reactive clock, not performance.now() —
+            // see audioClock above. Every phase term in the shader that reads
+            // u_time therefore slows down in silence and speeds up with volume.
+            gl.uniform1f(uniforms.time, audioClock);
+
+            // Previous frame
+            gl.uniform1i(uniforms.prevFrame, 0);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, readFbo.texture);
+
+            // Audio texture
+            gl.uniform1i(uniforms.audioTexture, 1);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, audioTex);
+
+            // Controls
+            gl.uniform1f(uniforms.density, controls.density);
+            gl.uniform1f(uniforms.decay, controls.decay);
+            gl.uniform1f(uniforms.threshold, controls.threshold);
+            gl.uniform1f(uniforms.scale, controls.scale);
+            gl.uniform1f(uniforms.fillAmount, controls.fillAmount);
+            gl.uniform1f(uniforms.curveAmount, controls.curveAmount);
+            gl.uniform1f(uniforms.latticeAmount, controls.latticeAmount);
+            gl.uniform1f(uniforms.mathConstant, controls.mathConstant);
+            gl.uniform1f(uniforms.constantAmount, controls.constantAmount);
+            gl.uniform1i(uniforms.invert, controls.invert ? 1 : 0);
+            gl.uniform1i(uniforms.freeze, controls.freeze ? 1 : 0);
+            gl.uniform1i(uniforms.linesEnabled, controls.linesEnabled ? 1 : 0);
+            gl.uniform1i(uniforms.fillEnabled, controls.fillEnabled ? 1 : 0);
+            gl.uniform1i(uniforms.curvesEnabled, controls.curvesEnabled ? 1 : 0);
+            gl.uniform1i(uniforms.latticeEnabled, controls.latticeEnabled ? 1 : 0);
+            gl.uniform1i(uniforms.gridRes, controls.gridRes);
+
+            // Audio data
+            gl.uniform1f(uniforms.rms, analyserData.rms);
+            gl.uniform1f(uniforms.low, analyserData.bands.low);
+            gl.uniform1f(uniforms.mid, analyserData.bands.mid);
+            gl.uniform1f(uniforms.high, analyserData.bands.high);
+            gl.uniform1f(uniforms.onset, analyserData.onset);
+            gl.uniform1f(uniforms.centroid, analyserData.centroid);
+
+            // Draw fullscreen quad
+            drawFullscreenQuad();
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+            // Blit to screen
+            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, writeFbo.fbo);
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+            gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+
+            currentFbo = currentFbo === 1 ? 2 : 1;
+
+            mirrorToOutputWindow();
+
+            // Cleanup
+            gl.deleteTexture(audioTex);
+
+            // FPS counter
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFpsUpdate > 1000) {
+                document.getElementById('fps').textContent = frameCount + ' FPS';
+                frameCount = 0;
+                lastFpsUpdate = now;
+            }
+        }
+
+        function drawFullscreenQuad() {
+            const vertices = new Float32Array([
+                -1, -1, 1, -1, -1, 1,
+                -1, 1, 1, -1, 1, 1
+            ]);
+
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+            const posLoc = gl.getAttribLocation(program, 'a_position');
+            gl.enableVertexAttribArray(posLoc);
+            gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+            gl.deleteBuffer(buffer);
+        }
+
+        // ---------- UI BINDING ----------
+        function setupUI() {
+            // Sliders
+            const sliders = ['density', 'decay', 'threshold', 'scale', 'fillAmount', 'curveAmount', 'latticeAmount', 'constantAmount'];
+            sliders.forEach(id => {
+                const input = document.getElementById(id);
+                const valDisplay = document.getElementById(id + 'Val');
+                input.addEventListener('input', () => {
+                    const val = parseFloat(input.value);
+                    controls[id] = val;
+                    valDisplay.textContent = val.toFixed(2);
+                });
+            });
+
+            // Listen toggle
+            document.getElementById('listenBtn').addEventListener('click', toggleListening);
+
+            // Record toggle
+            document.getElementById('recordBtn').addEventListener('click', toggleRecording);
+
+            // Output window
+            document.getElementById('outputWinBtn').addEventListener('click', openOutputWindow);
+
+            // Math constant picker (single-select)
+            const constantBtns = ['piBtn', 'phiBtn', 'eBtn', 'sqrt2Btn', 'sqrt5Btn', 'sqrt9Btn', 'sqrt13Btn'];
+            constantBtns.forEach(id => {
+                document.getElementById(id).addEventListener('click', function() {
+                    constantBtns.forEach(b => document.getElementById(b).classList.remove('active'));
+                    this.classList.add('active');
+                    controls.mathConstant = parseFloat(this.dataset.value);
+                });
+            });
+
+            // Effect toggles
+            const effectToggles = [
+                { btn: 'linesBtn', key: 'linesEnabled' },
+                { btn: 'fillBtn', key: 'fillEnabled' },
+                { btn: 'curvesBtn', key: 'curvesEnabled' },
+                { btn: 'latticeBtn', key: 'latticeEnabled' }
+            ];
+            effectToggles.forEach(({ btn, key }) => {
+                document.getElementById(btn).addEventListener('click', function() {
+                    controls[key] = !controls[key];
+                    this.classList.toggle('active');
+                });
+            });
+
+            // Invert / Freeze
+            document.getElementById('invertBtn').addEventListener('click', function() {
+                controls.invert = !controls.invert;
+                this.classList.toggle('active');
+            });
+
+            document.getElementById('freezeBtn').addEventListener('click', function() {
+                controls.freeze = !controls.freeze;
+                this.classList.toggle('active');
+            });
+
+            // Grid resolution
+            const gridBtns = ['grid4Btn', 'grid16Btn', 'grid64Btn'];
+            gridBtns.forEach(id => {
+                document.getElementById(id).addEventListener('click', function() {
+                    gridBtns.forEach(b => document.getElementById(b).classList.remove('active'));
+                    this.classList.add('active');
+                    const val = parseInt(this.textContent.split('×')[0]);
+                    controls.gridRes = val;
+                });
+            });
+
+
+            const clearBtn = document.getElementById('clearScenesBtn');
+            let clearArmed = false;
+            let clearArmTimeout = null;
+            clearBtn.addEventListener('click', () => {
+                if (!clearArmed) {
+                    clearArmed = true;
+                    clearBtn.textContent = 'CLICK AGAIN TO CONFIRM DELETION';
+                    clearBtn.style.color = '#ff4444';
+                    clearArmTimeout = setTimeout(() => {
+                        clearArmed = false;
+                        clearBtn.textContent = 'CLEAR ALL';
+                        clearBtn.style.color = '';
+                    }, 2500);
+                } else {
+                    clearTimeout(clearArmTimeout);
+                    clearArmed = false;
+                    clearBtn.textContent = 'CLEAR ALL';
+                    clearBtn.style.color = '';
+                    clearAllScenes();
+                }
+            });
+
+            // Floating panel (mini-player style): detach, drag, resize
+            setupFloatingPanel();
+        }
+
+        function setupFloatingPanel() {
+            const ui = document.getElementById('ui');
+            const floatBtn = document.getElementById('floatToggleBtn');
+            const dragHandle = document.getElementById('uiDragHandle');
+            let dragging = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            function startDrag(clientX, clientY) {
+                if (!ui.classList.contains('floating')) return;
+                dragging = true;
+                const rect = ui.getBoundingClientRect();
+                dragOffsetX = clientX - rect.left;
+                dragOffsetY = clientY - rect.top;
+            }
+            function moveDrag(clientX, clientY) {
+                if (!dragging) return;
+                const maxLeft = window.innerWidth - 40;
+                const maxTop = window.innerHeight - 40;
+                ui.style.left = Math.min(Math.max(0, clientX - dragOffsetX), maxLeft) + 'px';
+                ui.style.top = Math.min(Math.max(0, clientY - dragOffsetY), maxTop) + 'px';
+            }
+            function endDrag() {
+                dragging = false;
+            }
+
+            dragHandle.addEventListener('mousedown', (e) => {
+                startDrag(e.clientX, e.clientY);
+                e.preventDefault();
+            });
+            window.addEventListener('mousemove', (e) => moveDrag(e.clientX, e.clientY));
+            window.addEventListener('mouseup', endDrag);
+
+            dragHandle.addEventListener('touchstart', (e) => {
+                const t = e.touches[0];
+                startDrag(t.clientX, t.clientY);
+            }, { passive: true });
+            window.addEventListener('touchmove', (e) => {
+                if (!dragging) return;
+                const t = e.touches[0];
+                moveDrag(t.clientX, t.clientY);
+            }, { passive: true });
+            window.addEventListener('touchend', endDrag);
+
+            floatBtn.addEventListener('click', () => {
+                const floating = ui.classList.toggle('floating');
+                if (floating) {
+
+                    const rect = ui.getBoundingClientRect();
+                    ui.style.left = rect.left + 'px';
+                    ui.style.top = rect.top + 'px';
+                    ui.style.width = rect.width + 'px';
+                    ui.style.height = rect.height + 'px';
+                    floatBtn.textContent = '⤡';
+                    floatBtn.title = 'Dock panel';
+                } else {
+                    ui.style.left = '';
+                    ui.style.top = '';
+                    ui.style.width = '';
+                    ui.style.height = '';
+                    floatBtn.textContent = '⤢';
+                    floatBtn.title = 'Float panel (drag & resize)';
+                }
+            });
+        }
+
+        function syncUIFromState() {
+            ['density', 'decay', 'threshold', 'scale', 'fillAmount', 'curveAmount', 'latticeAmount', 'constantAmount'].forEach(id => {
+                const input = document.getElementById(id);
+                const valDisplay = document.getElementById(id + 'Val');
+                if (!input) return;
+                input.value = controls[id];
+                valDisplay.textContent = controls[id].toFixed(2);
+            });
+
+            const constantBtns = ['piBtn', 'phiBtn', 'eBtn', 'sqrt2Btn', 'sqrt5Btn', 'sqrt9Btn', 'sqrt13Btn'];
+            constantBtns.forEach(id => {
+                const btn = document.getElementById(id);
+                btn.classList.toggle('active', Math.abs(parseFloat(btn.dataset.value) - controls.mathConstant) < 1e-6);
+            });
+
+            const effectToggles = [
+                { btn: 'linesBtn', key: 'linesEnabled' },
+                { btn: 'fillBtn', key: 'fillEnabled' },
+                { btn: 'curvesBtn', key: 'curvesEnabled' },
+                { btn: 'latticeBtn', key: 'latticeEnabled' }
+            ];
+            effectToggles.forEach(({ btn, key }) => {
+                document.getElementById(btn).classList.toggle('active', !!controls[key]);
+            });
+
+            document.getElementById('invertBtn').classList.toggle('active', !!controls.invert);
+            document.getElementById('freezeBtn').classList.toggle('active', !!controls.freeze);
+
+            const gridBtns2 = { 4: 'grid4Btn', 16: 'grid16Btn', 64: 'grid64Btn' };
+            Object.entries(gridBtns2).forEach(([val, id]) => {
+                document.getElementById(id).classList.toggle('active', controls.gridRes === parseInt(val));
+            });
+        }
+
+
+        function loadScenes() {
+            try {
+                const raw = localStorage.getItem(SCENES_KEY);
+                const parsed = raw ? JSON.parse(raw) : null;
+                if (Array.isArray(parsed) && parsed.length === SCENE_COUNT) {
+                    scenes = parsed;
+                } else {
+                    scenes = new Array(SCENE_COUNT).fill(null);
+                }
+            } catch (e) {
+                scenes = new Array(SCENE_COUNT).fill(null);
+            }
+        }
+
+        function persistScenes() {
+            try {
+                localStorage.setItem(SCENES_KEY, JSON.stringify(scenes));
+            } catch (e) {
+                console.error('Could not save scenes:', e);
+            }
+        }
+
+        function clearAllScenes() {
+            scenes = new Array(SCENE_COUNT).fill(null);
+            activeSceneIndex = null;
+            persistScenes();
+            renderScenes();
+        }
+
+        function saveScene(index) {
+            scenes[index] = JSON.parse(JSON.stringify(controls));
+            activeSceneIndex = index;
+            persistScenes();
+            renderScenes();
+        }
+
+        function deleteScene(index) {
+            scenes[index] = null;
+            if (activeSceneIndex === index) activeSceneIndex = null;
+            persistScenes();
+            renderScenes();
+        }
+
+        function loadScene(index) {
+            const snapshot = scenes[index];
+            if (!snapshot) return;
+            Object.assign(controls, JSON.parse(JSON.stringify(snapshot)));
+            activeSceneIndex = index;
+            syncUIFromState();
+            renderScenes();
+        }
+
+        function renderScenes() {
+            const rail = document.getElementById('favoritesRail');
+            rail.innerHTML = '';
+            scenes.forEach((snapshot, i) => {
+                const d = document.createElement('div');
+                const filled = !!snapshot;
+                d.className = 'favorite-diamond' + (filled ? ' filled' : '') + (i === activeSceneIndex ? ' active' : '');
+                d.title = filled
+                    ? 'Scene ' + (i + 1) + ' — click to load, right-click to overwrite'
+                    : 'Scene ' + (i + 1) + ' — click to save current settings here';
+
+                const num = document.createElement('span');
+                num.className = 'scene-num';
+                num.textContent = i + 1;
+                d.appendChild(num);
+
+                if (filled) {
+                    const del = document.createElement('span');
+                    del.className = 'diamond-delete';
+                    del.textContent = '×';
+                    del.title = 'Delete scene ' + (i + 1);
+                    del.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        deleteScene(i);
+                    });
+                    d.appendChild(del);
+                }
+
+                d.addEventListener('click', () => {
+                    if (scenes[i]) {
+                        loadScene(i);
+                    } else {
+                        saveScene(i);
+                    }
+                });
+
+                d.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    if (!scenes[i]) return;
+                    saveScene(i);
+                    d.classList.remove('overwritten');
+                    void d.offsetWidth; // restart animation if clicked repeatedly
+                    d.classList.add('overwritten');
+                });
+                rail.appendChild(d);
+            });
+        }
+
+        // ---------- MAIN LOOP ----------
+        function init() {
+            if (!initGL()) {
+                document.body.innerHTML = '<div style="color:white;padding:20px;font-family:monospace;">WebGL2 not supported. Please use a modern browser.</div>';
+                return;
+            }
+
+            setupUI();
+
+            // ---- Scenes ----
+            loadScenes();
+            renderScenes();
+
+            // Start loop
+            function loop() {
+                render();
+                requestAnimationFrame(loop);
+            }
+            loop();
+
+            console.log('Listener ready — click LISTEN to grant mic access');
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
