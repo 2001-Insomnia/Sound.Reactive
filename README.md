@@ -75,9 +75,6 @@ No commercial use allowed.
 ||s |||t |||r |||u |||c |||t |||u |||r |||e ||
 ||__|||__|||__|||__|||__|||__|||__|||__|||__||
 |/__\|/__\|/__\|/__\|/__\|/__\|/__\|/__\|/__\|
-
-```
-
 listener.html
 │
 ├── <head>
@@ -142,4 +139,5 @@ listener.html
 │       └── MAIN LOOP
 │           └── init()                           # boot sequence → requestAnimationFrame loop
 
+```
 
